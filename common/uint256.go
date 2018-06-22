@@ -2,6 +2,7 @@ package common
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 )
@@ -53,6 +54,21 @@ func Uint256FromBytes(f []byte) (*Uint256, error) {
 
 	var hash Uint256
 	copy(hash[:], f)
+
+	return &hash, nil
+}
+
+func Uint256FromHexString(hexHash string) (*Uint256, error) {
+	if len(hexHash) != UINT256SIZE*2 {
+		return nil, errors.New("[Common]: Uint256ParseFromString err, len != 64")
+	}
+	hashByte, err := hex.DecodeString(hexHash)
+	if err != nil {
+		return nil, err
+	}
+
+	var hash Uint256
+	copy(hash[:], hashByte)
 
 	return &hash, nil
 }
