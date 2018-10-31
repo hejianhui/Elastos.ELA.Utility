@@ -35,6 +35,15 @@ func IsEqualBytes(this []byte, that []byte) bool {
 	return true
 }
 
+func ToReversedString(hash Uint256) string {
+	return BytesToHexString(BytesReverse(hash[:]))
+}
+
+func FromReversedString(reversed string) ([]byte, error) {
+	bytes, err := HexStringToBytes(reversed)
+	return BytesReverse(bytes), err
+}
+
 func ClearBytes(arr []byte) {
 	for i := 0; i < len(arr); i++ {
 		arr[i] = 0
