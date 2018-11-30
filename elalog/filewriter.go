@@ -41,64 +41,60 @@ func (w *fileWriter) writeHandler() {
 	var fileSize int64
 	var folderSize int64
 
+	files, _ := ioutil.ReadDir(w.path)
+	for _, f := range files {
+		folderSize += f.Size()
+	}
+
 	for {
-		select {
-		case buf := <-w.writeChan:
-			var bufLen = int64(len(buf))
+		buf := <-w.writeChan
+		var bufLen = int64(len(buf))
 
-			// create new log file if current file is nil or reach max size.
-			if atomic.AddInt64(&fileSize, bufLen) >= w.maxFileSize ||
-				current == nil {
+		// create new log file if current file is nil or reach max size.
+		if atomic.AddInt64(&fileSize, bufLen) >= w.maxFileSize ||
+			current == nil {
 
-				// force create new log file
-				var err error
-				var file *os.File
-				for file, err = newLogFile(w.path); err != nil; {
-					fmt.Printf("New log file %s, err %v\n", w.path, err)
-					file, err = newLogFile(w.path)
-				}
+			// force create new log file
+			var err error
+			var file *os.File
+			for file, err = newLogFile(w.path); err != nil; {
+				fmt.Printf("New log file %s, err %v\n", w.path, err)
+				file, err = newLogFile(w.path)
+			}
 
-				// close previous log file in an other goroutine.
-				go func(file *os.File) {
-					if file != nil {
-						// force close file
-						for err := file.Close(); err != nil; {
-							err = file.Close()
-						}
+			// close previous log file in an other goroutine.
+			go func(file *os.File) {
+				if file != nil {
+					// force close file
+					for err := file.Close(); err != nil; {
+						err = file.Close()
 					}
-				}(current)
-
-				current = file
-				atomic.StoreInt64(&fileSize, 0)
-			}
-
-			// force write buffer to file.
-			for _, err := current.Write(buf); err != nil; {
-				_, err = current.Write(buf)
-			}
-			w.writeReply <- struct{}{}
-
-			// check folder size by check buf interval, if folder size
-			// reach max size, remove oldest log file.
-			if atomic.AddInt64(&folderSize, bufLen) >= w.maxFolderSize {
-				var total int64
-				files, _ := ioutil.ReadDir(w.path)
-				for _, f := range files {
-					total += f.Size()
 				}
+			}(current)
 
-				if total < w.maxFolderSize {
-					continue
-				}
+			current = file
+			atomic.StoreInt64(&fileSize, 0)
+		}
 
-				// Get the oldest log file
-				file := files[0]
-				// Remove it
-				err := os.Remove(filepath.Join(w.path, file.Name()))
-				if err == nil {
-					total -= file.Size()
-					atomic.StoreInt64(&folderSize, total)
-				}
+		// force write buffer to file.
+		for _, err := current.Write(buf); err != nil; {
+			_, err = current.Write(buf)
+		}
+		w.writeReply <- struct{}{}
+
+		// check folder size by check buf interval, if folder size
+		// reach max size, remove oldest log file.
+		if atomic.AddInt64(&folderSize, bufLen) >= w.maxFolderSize {
+			files, _ := ioutil.ReadDir(w.path)
+
+			// Get the oldest log file
+			file := files[0]
+			// Remove it
+			err := os.Remove(filepath.Join(w.path, file.Name()))
+			if err != nil {
+				fmt.Println("remove file error:", err)
+			} else {
+				atomic.StoreInt64(&folderSize, folderSize-file.Size())
 			}
 		}
 	}
@@ -130,7 +126,7 @@ func NewFileWriter(path string, maxFileSize, maxFolderSize int64) *fileWriter {
 		maxFileSize:   defaultMaxFileSize,
 		maxFolderSize: defaultMaxFolderSize,
 		writeChan:     make(chan []byte, 1),
-		writeReply:    make(chan struct{}, 1),
+		writeReply:    make(chan struct{}),
 	}
 
 	if maxFileSize > 0 {
