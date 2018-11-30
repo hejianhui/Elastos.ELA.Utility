@@ -85,7 +85,11 @@ func (w *fileWriter) writeHandler() {
 		// check folder size by check buf interval, if folder size
 		// reach max size, remove oldest log file.
 		if atomic.AddInt64(&folderSize, bufLen) >= w.maxFolderSize {
+			var total int64
 			files, _ := ioutil.ReadDir(w.path)
+			for _, f := range files {
+				total += f.Size()
+			}
 
 			// Get the oldest log file
 			file := files[0]
@@ -93,8 +97,9 @@ func (w *fileWriter) writeHandler() {
 			err := os.Remove(filepath.Join(w.path, file.Name()))
 			if err != nil {
 				fmt.Println("remove file error:", err)
+				atomic.StoreInt64(&folderSize, total)
 			} else {
-				atomic.StoreInt64(&folderSize, folderSize-file.Size())
+				atomic.StoreInt64(&folderSize, total-file.Size())
 			}
 		}
 	}
