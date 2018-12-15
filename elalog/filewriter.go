@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -59,7 +60,7 @@ func (w *fileWriter) writeHandler() {
 			var file *os.File
 			for file, err = newLogFile(w.path); err != nil; {
 				fmt.Printf("New log file %s, err %v\n", w.path, err)
-				file, err = newLogFile(w.path)
+				return
 			}
 
 			// close previous log file in an other goroutine.
@@ -120,9 +121,19 @@ func newLogFile(path string) (*os.File, error) {
 		return nil, err
 	}
 
-	return os.OpenFile(filepath.Join(path,
+	file, err := os.OpenFile(filepath.Join(path,
 		time.Now().Format("2006-01-02_15.04.05"))+".log",
 		os.O_RDWR|os.O_CREATE, 0664)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// redirect panic information to log file in linux/mac (does not work in windows)
+	if err := syscall.Dup2(int(file.Fd()), int(os.Stderr.Fd())); err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 func NewFileWriter(path string, maxFileSize, maxFolderSize int64) *fileWriter {
